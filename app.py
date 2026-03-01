@@ -123,6 +123,32 @@ def api_price_history(ticker: str, days: int = 90):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.get("/api/backtest")
+def api_backtest(period: str = "1y"):
+    """Run backtest across all tickers. Cached for 10 minutes."""
+    from modules.backtester import run_all_backtests
+    cache_key = f"backtest_{period}"
+    # Simple cache check
+    if cache_key in _cache and _cache.get(f"{cache_key}_ts"):
+        from datetime import timedelta
+        age = datetime.utcnow() - datetime.fromisoformat(_cache[f"{cache_key}_ts"])
+        if age < timedelta(minutes=10):
+            return JSONResponse(_cache[cache_key])
+    results = run_all_backtests(period)
+    _cache[cache_key] = results
+    _cache[f"{cache_key}_ts"] = datetime.utcnow().isoformat()
+    return JSONResponse(results)
+
+@app.get("/api/backtest/{ticker}")
+def api_backtest_ticker(ticker: str, period: str = "1y"):
+    """Run backtest for a single ticker."""
+    from modules.backtester import run_backtest
+    try:
+        result = run_backtest(ticker, period)
+        return JSONResponse(result)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/api/closed_trades")
 def api_closed_trades():
     """Return closed trade history with P&L."""

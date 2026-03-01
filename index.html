@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quant-Stock Live Dashboard | Edge Detection</title>
+    <title>Quant-Stock Live Dashboard | Edge & Calibration</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -38,57 +38,74 @@
             border-radius: 16px;
             padding: 20px;
             box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
         }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        h1 { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
-        .ticker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; }
+        h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+        .ticker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
         .ticker-card { padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); }
         .signal { padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; }
         .signal.BUY { background: var(--success); color: #064e3b; }
         .signal.SELL { background: var(--danger); color: #7f1d1d; }
         .signal.HOLD { background: var(--warning); color: #78350f; }
-        .stat-box { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px; text-align: center; }
-        .stat-value { font-size: 1.5rem; font-weight: 800; }
+        .prob-bar-container { background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; margin: 8px 0; overflow: hidden; }
+        .prob-bar { background: var(--accent); height: 100%; transition: width 0.5s ease; }
+        .stat-box { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 1.2rem; font-weight: 800; }
         .positive { color: var(--success); }
         .negative { color: var(--danger); }
-        .chart-container { height: 400px; width: 100%; }
-        .suggested-buys { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        .suggested-buys td, .suggested-buys th { padding: 10px; text-align: left; border-top: 1px solid rgba(255,255,255,0.05); }
+        .chart-container { height: 300px; width: 100%; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .data-table th, .data-table td { padding: 8px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .refresh-btn { background: var(--accent); color: var(--bg); border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+        .badge { font-size: 0.65rem; padding: 2px 5px; border-radius: 4px; background: rgba(255,255,255,0.1); }
     </style>
 </head>
 <body>
     <div class="dashboard-grid">
-        <div class="main-panel" style="display: flex; flex-direction: column; gap: 20px;">
+        <div class="main-panel">
             <div class="card">
                 <div class="header">
-                    <h1>🚀 Market Edge Scanner</h1>
-                    <button class="refresh-btn" onclick="refreshAll()">Scan Now</button>
+                    <h1>🔍 Live Edge Detection</h1>
+                    <button class="refresh-btn" onclick="refreshAll()">Refresh Now</button>
                 </div>
                 <div class="ticker-grid" id="ticker-grid"></div>
             </div>
+            
             <div class="card">
-                <h1>📈 Cumulative P&L History</h1>
+                <h1>📊 Cumulative P&L History</h1>
                 <div class="chart-container"><canvas id="pnlChart"></canvas></div>
             </div>
         </div>
-        <div class="sidebar" style="display: flex; flex-direction: column; gap: 20px;">
+
+        <div class="sidebar">
             <div class="card">
-                <h1>💰 Portfolio</h1>
+                <h1>💰 Portfolio Summary</h1>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
-                    <div class="stat-box"><div style="font-size: 0.7rem; opacity: 0.6;">Realized</div><div class="stat-value" id="realized">$0.00</div></div>
-                    <div class="stat-box"><div style="font-size: 0.7rem; opacity: 0.6;">Open</div><div class="stat-value" id="open-pnl">$0.00</div></div>
+                    <div class="stat-box"><div style="font-size: 0.6rem; opacity: 0.6;">REALIZED</div><div class="stat-value" id="realized">$0.00</div></div>
+                    <div class="stat-box"><div style="font-size: 0.6rem; opacity: 0.6;">OPEN</div><div class="stat-value" id="open-pnl">$0.00</div></div>
                 </div>
             </div>
+
             <div class="card">
-                <h1>🎯 Active Buys</h1>
-                <table class="suggested-buys">
+                <h1>🎯 Model Calibration (Brier)</h1>
+                <div style="font-size: 0.7rem; opacity: 0.5; margin-bottom: 10px;">Lower score = Better accuracy (0 to 1)</div>
+                <table class="data-table">
+                    <thead><tr><th>Ticker</th><th>H</th><th>Score</th><th>Grade</th></tr></thead>
+                    <tbody id="brier-body"></tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h1>📝 Active Positions</h1>
+                <table class="data-table">
                     <thead><tr><th>Ticker</th><th>Entry</th><th>PnL</th></tr></thead>
                     <tbody id="suggested-body"></tbody>
                 </table>
             </div>
         </div>
     </div>
+
     <script>
         let pnlChart;
         let pnlHistory = {};
@@ -100,56 +117,92 @@
                 data: { labels: [], datasets: [] },
                 options: { 
                     responsive: true, maintainAspectRatio: false,
-                    scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' } }, x: { display: false } }
+                    scales: { 
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' } }, 
+                        x: { grid: { display: false }, ticks: { display: false } } 
+                    },
+                    plugins: { legend: { labels: { color: '#f8fafc' } } }
                 }
             });
         }
 
         async function refreshAll() {
-            const res = await fetch('/api/full');
-            const data = await res.json();
-            
-            // Update Ticker Grid
-            const grid = document.getElementById('ticker-grid');
-            grid.innerHTML = '';
-            data.snapshots.forEach((snap, i) => {
-                const edge = data.edges[i];
-                grid.innerHTML += `
-                    <div class="ticker-card">
-                        <div style="display:flex; justify-content:space-between;">
-                            <strong>${snap.ticker}</strong>
-                            <span class="signal ${edge.signal}">${edge.signal}</span>
-                        </div>
-                        <div style="font-size:1.2rem; font-family:monospace;">$${snap.current_price.toFixed(2)}</div>
-                        <div style="font-size:0.7rem; opacity:0.5;">Edge: ${edge.composite_score.toFixed(2)}</div>
-                    </div>`;
-            });
-
-            // Update Active Positions & Open PnL
-            const body = document.getElementById('suggested-body');
-            body.innerHTML = '';
-            let openPnL = 0;
-            data.positions.forEach(pos => {
-                const snap = data.snapshots.find(s => s.ticker === pos.ticker);
-                const pnl = (snap.current_price - pos.entry_price) * pos.quantity;
-                openPnL += pnl;
-                body.innerHTML += `
-                    <tr>
-                        <td>${pos.ticker}</td>
-                        <td>$${pos.entry_price.toFixed(2)}</td>
-                        <td class="${pnl >= 0 ? 'positive' : 'negative'}">$${pnl.toFixed(2)}</td>
-                    </tr>`;
+            try {
+                const res = await fetch('/api/full');
+                const data = await res.json();
                 
-                // Track history for chart
-                if (!pnlHistory[pos.ticker]) pnlHistory[pos.ticker] = [];
-                pnlHistory[pos.ticker].push(pnl);
-            });
+                // Update Ticker Cards
+                const grid = document.getElementById('ticker-grid');
+                grid.innerHTML = '';
+                data.snapshots.forEach((snap, i) => {
+                    const edge = data.edges.find(e => e.ticker === snap.ticker);
+                    const pred = data.predictions.find(p => p.ticker === snap.ticker);
+                    if (!edge || !pred) return;
 
-            document.getElementById('realized').textContent = `$${data.portfolio.total_realized.toFixed(2)}`;
-            document.getElementById('open-pnl').textContent = `$${openPnL.toFixed(2)}`;
-            document.getElementById('open-pnl').className = `stat-value ${openPnL >= 0 ? 'positive' : 'negative'}`;
+                    const p1d = pred.predictions['1d'].p_up * 100;
+                    
+                    grid.innerHTML += `
+                        <div class="ticker-card">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <strong>${snap.ticker}</strong>
+                                <span class="signal ${edge.signal}">${edge.signal}</span>
+                            </div>
+                            <div style="font-size:1.5rem; font-family:monospace; margin: 8px 0;">$${snap.current_price.toFixed(2)}</div>
+                            
+                            <div style="display:flex; justify-content:space-between; font-size:0.7rem; opacity:0.7;">
+                                <span>P(Bullish 1d)</span>
+                                <span>${p1d.toFixed(1)}%</span>
+                            </div>
+                            <div class="prob-bar-container"><div class="prob-bar" style="width: ${p1d}%"></div></div>
+                            
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size:0.65rem; opacity:0.6; margin-top:5px;">
+                                <div>Edge Score: ${edge.composite_score.toFixed(3)}</div>
+                                <div style="text-align:right;">Vol: ${(snap.sigma_20d*100).toFixed(1)}%</div>
+                            </div>
+                        </div>`;
+                });
 
-            updateChart();
+                // Update Brier Scores
+                const brierBody = document.getElementById('brier-body');
+                brierBody.innerHTML = '';
+                data.brier_scores.forEach(b => {
+                    if (b.brier_score === null) return;
+                    brierBody.innerHTML += `
+                        <tr>
+                            <td>${b.ticker}</td>
+                            <td>${b.horizon}</td>
+                            <td>${b.brier_score.toFixed(3)}</td>
+                            <td><span class="badge">${b.grade}</span></td>
+                        </tr>`;
+                });
+
+                // Update Positions & PnL
+                const posBody = document.getElementById('suggested-body');
+                posBody.innerHTML = '';
+                let openPnL = 0;
+                data.positions.forEach(pos => {
+                    const snap = data.snapshots.find(s => s.ticker === pos.ticker);
+                    const pnl = (snap.current_price - pos.entry_price) * pos.quantity;
+                    openPnL += pnl;
+                    posBody.innerHTML += `
+                        <tr>
+                            <td>${pos.ticker}</td>
+                            <td>$${pos.entry_price.toFixed(2)}</td>
+                            <td class="${pnl >= 0 ? 'positive' : 'negative'}">$${pnl.toFixed(2)}</td>
+                        </tr>`;
+                    
+                    if (!pnlHistory[pos.ticker]) pnlHistory[pos.ticker] = [];
+                    pnlHistory[pos.ticker].push(pnl);
+                });
+
+                document.getElementById('realized').textContent = `$${data.portfolio.total_realized.toFixed(2)}`;
+                document.getElementById('open-pnl').textContent = `$${openPnL.toFixed(2)}`;
+                document.getElementById('open-pnl').className = `stat-value ${openPnL >= 0 ? 'positive' : 'negative'}`;
+                
+                updateChart();
+            } catch (e) {
+                console.error("Refresh failed", e);
+            }
         }
 
         function updateChart() {
@@ -158,7 +211,8 @@
             pnlChart.data.datasets = Object.keys(pnlHistory).map(ticker => ({
                 label: ticker,
                 data: pnlHistory[ticker],
-                borderColor: '#' + Math.floor(Math.random()*16777215).toString(16),
+                borderColor: '#' + (Math.random().toString(16) + '000000').substring(2,8),
+                borderWidth: 2,
                 tension: 0.3,
                 pointRadius: 0
             }));

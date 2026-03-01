@@ -184,6 +184,36 @@
         }
         .refresh-btn:hover { opacity: 0.85; }
 
+        /* ── BACKTEST ── */
+        .bt-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .bt-period-tabs { display: flex; gap: 6px; }
+        .bt-period-tab {
+            background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+            padding: 4px 12px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; cursor: pointer;
+            font-family: 'Inter', sans-serif;
+        }
+        .bt-period-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .bt-ticker-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+        .bt-ticker-tab {
+            background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
+            padding: 3px 10px; border-radius: 5px; font-size: 0.68rem; font-weight: 600; cursor: pointer;
+            font-family: 'Inter', sans-serif;
+        }
+        .bt-ticker-tab.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+        .bt-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 14px 0; }
+        .bt-stat { background: var(--surface-2); padding: 10px; border-radius: 8px; text-align: center; }
+        .bt-stat-label { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 2px; }
+        .bt-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 1rem; font-weight: 800; }
+        .bt-trades-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; margin-top: 12px; }
+        .bt-trades-table th {
+            font-size: 0.6rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.04em; color: var(--text-muted); padding: 6px 8px; text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .bt-trades-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
+        .bt-trades-table tr:last-child td { border-bottom: none; }
+        .bt-loading { text-align: center; padding: 30px 0; color: var(--text-muted); font-size: 0.8rem; }
+
         @media (max-width: 1100px) {
             .ticker-strip { grid-template-columns: repeat(3, 1fr); }
             .main-grid { grid-template-columns: 1fr; }
@@ -312,6 +342,36 @@
 
         </div>
     </div>
+
+    <!-- BACKTEST SECTION (full width, below main grid) -->
+    <div class="card" style="margin-top: 4px;">
+        <div class="bt-header">
+            <div class="card-title" style="margin-bottom:0;">Strategy Backtest</div>
+            <div style="display:flex; gap: 12px; align-items:center;">
+                <div class="bt-ticker-tabs" id="bt-ticker-tabs"></div>
+                <div class="bt-period-tabs" id="bt-period-tabs">
+                    <button class="bt-period-tab" data-period="6mo">6M</button>
+                    <button class="bt-period-tab active" data-period="1y">1Y</button>
+                    <button class="bt-period-tab" data-period="2y">2Y</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="bt-content">
+            <div class="bt-loading" id="bt-loading">Select a ticker to run backtest...</div>
+            <div class="bt-stats-grid" id="bt-stats" style="display:none;"></div>
+            <div style="height: 240px; display:none;" id="bt-chart-wrap"><canvas id="btChart"></canvas></div>
+            <div id="bt-trades-wrap" style="display:none; max-height: 320px; overflow-y: auto; margin-top: 12px;">
+                <table class="bt-trades-table">
+                    <thead>
+                        <tr><th>#</th><th>Entry</th><th>Entry $</th><th>Exit</th><th>Exit $</th><th>Days</th><th>Edge</th><th>P&L</th><th>P&L %</th></tr>
+                    </thead>
+                    <tbody id="bt-trades-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -627,9 +687,143 @@ document.getElementById('chart-tabs').addEventListener('click', e => {
     loadPriceChart(selectedTicker, chartDays);
 });
 
+// ── BACKTEST ──
+let btChart;
+let btSelectedTicker = null;
+let btPeriod = '1y';
+
+function initBtChart() {
+    const ctx = document.getElementById('btChart').getContext('2d');
+    btChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            scales: {
+                y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', font: { size: 10, family: 'JetBrains Mono' } } },
+                x: { grid: { display: false }, ticks: { color: '#475569', font: { size: 9 }, maxTicksLimit: 10 } }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: '#1e293b', titleColor: '#f1f5f9', bodyColor: '#94a3b8', bodyFont: { family: 'JetBrains Mono' }, borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1 }
+            }
+        }
+    });
+}
+
+// Build ticker tabs
+function initBtTabs() {
+    const tabsEl = document.getElementById('bt-ticker-tabs');
+    TICKERS.forEach(t => {
+        tabsEl.innerHTML += `<button class="bt-ticker-tab" data-ticker="${t}">${t}</button>`;
+    });
+    tabsEl.addEventListener('click', e => {
+        if (!e.target.dataset.ticker) return;
+        document.querySelectorAll('.bt-ticker-tab').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        btSelectedTicker = e.target.dataset.ticker;
+        loadBacktest(btSelectedTicker, btPeriod);
+    });
+}
+
+// Period tabs
+document.getElementById('bt-period-tabs').addEventListener('click', e => {
+    if (!e.target.classList.contains('bt-period-tab')) return;
+    document.querySelectorAll('.bt-period-tab').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    btPeriod = e.target.dataset.period;
+    if (btSelectedTicker) loadBacktest(btSelectedTicker, btPeriod);
+});
+
+async function loadBacktest(ticker, period) {
+    const loading = document.getElementById('bt-loading');
+    const statsEl = document.getElementById('bt-stats');
+    const chartWrap = document.getElementById('bt-chart-wrap');
+    const tradesWrap = document.getElementById('bt-trades-wrap');
+
+    loading.style.display = 'block';
+    loading.textContent = `Running ${period} backtest for ${ticker}...`;
+    statsEl.style.display = 'none';
+    chartWrap.style.display = 'none';
+    tradesWrap.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/backtest/${ticker}?period=${period}`);
+        const data = await res.json();
+        if (data.error) { loading.textContent = 'Error: ' + data.error; return; }
+        loading.style.display = 'none';
+
+        const s = data.summary;
+
+        // Stats
+        const pnlClass = s.total_pnl >= 0 ? 'up' : 'down';
+        statsEl.innerHTML = `
+            <div class="bt-stat"><div class="bt-stat-label">Total P&L</div><div class="bt-stat-val ${pnlClass}">$${s.total_pnl}</div></div>
+            <div class="bt-stat"><div class="bt-stat-label">Return</div><div class="bt-stat-val ${pnlClass}">${s.total_pnl_pct}%</div></div>
+            <div class="bt-stat"><div class="bt-stat-label">Trades</div><div class="bt-stat-val">${s.total_trades}</div></div>
+            <div class="bt-stat"><div class="bt-stat-label">Win Rate</div><div class="bt-stat-val">${s.win_rate}%</div></div>
+            <div class="bt-stat"><div class="bt-stat-label">Avg Win</div><div class="bt-stat-val up">$${s.avg_win}</div></div>
+            <div class="bt-stat"><div class="bt-stat-label">Avg Loss</div><div class="bt-stat-val down">$${s.avg_loss}</div></div>
+            <div class="bt-stat"><div class="bt-stat-label">Profit Factor</div><div class="bt-stat-val">${s.profit_factor}</div></div>
+            <div class="bt-stat"><div class="bt-stat-label">Sharpe</div><div class="bt-stat-val">${s.sharpe}</div></div>
+            <div class="bt-stat"><div class="bt-stat-label">Max DD</div><div class="bt-stat-val down">${s.max_drawdown_pct}%</div></div>
+            <div class="bt-stat"><div class="bt-stat-label">Avg Hold</div><div class="bt-stat-val">${s.avg_hold_days}d</div></div>
+        `;
+        statsEl.style.display = 'grid';
+
+        // Equity curve
+        if (data.equity_curve && data.equity_curve.length) {
+            // Sample every N points if too many
+            let ec = data.equity_curve;
+            if (ec.length > 200) {
+                const step = Math.ceil(ec.length / 200);
+                ec = ec.filter((_, i) => i % step === 0 || i === ec.length - 1);
+            }
+            btChart.data.labels = ec.map(e => e.date);
+            btChart.data.datasets = [{
+                label: ticker + ' Equity',
+                data: ec.map(e => e.equity),
+                borderColor: COLORS[ticker] || '#3b82f6',
+                borderWidth: 2, pointRadius: 0, tension: 0.3,
+                fill: true, backgroundColor: (COLORS[ticker] || '#3b82f6') + '10'
+            }];
+            btChart.update('none');
+            chartWrap.style.display = 'block';
+        }
+
+        // Trade log
+        const tbody = document.getElementById('bt-trades-body');
+        tbody.innerHTML = '';
+        if (data.trades && data.trades.length) {
+            data.trades.forEach((t, i) => {
+                const cls = t.pnl >= 0 ? 'up' : 'down';
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td>${t.entry_date}</td>
+                        <td>$${t.entry_price.toFixed(2)}</td>
+                        <td>${t.exit_date}</td>
+                        <td>$${t.exit_price.toFixed(2)}</td>
+                        <td>${t.hold_days}</td>
+                        <td>${t.edge_at_entry}</td>
+                        <td class="${cls}">$${t.pnl.toFixed(2)}</td>
+                        <td class="${cls}">${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct.toFixed(2)}%</td>
+                    </tr>`;
+            });
+            tradesWrap.style.display = 'block';
+        }
+    } catch (e) {
+        loading.textContent = 'Failed to load backtest: ' + e.message;
+        console.error(e);
+    }
+}
+
 // ── BOOT ──
 initMainChart();
 initPnlChart();
+initBtChart();
+initBtTabs();
 refreshAll();
 setInterval(refreshAll, 60000);
 </script>

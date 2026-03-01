@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Prediction Dashboard - Live Edge Detection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .status-bar {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .refresh-btn {
+            background: #4ade80;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .refresh-btn:hover {
+            background: #22c55e;
+            transform: scale(1.05);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            transition: transform 0.3s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 2px solid rgba(255,255,255,0.2);
+            padding-bottom: 10px;
+        }
+        .ticker {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+        .price {
+            font-size: 1.5em;
+            color: #4ade80;
+        }
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+        }
+        .metric-label {
+            opacity: 0.8;
+        }
+        .signal {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .signal.BUY {
+            background: #4ade80;
+            color: #000;
+        }
+        .signal.SELL {
+            background: #f87171;
+            color: #fff;
+        }
+        .signal.HOLD {
+            background: #fbbf24;
+            color: #000;
+        }
+        .predictions {
+            margin-top: 15px;
+        }
+        .prediction-item {
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+            border-radius: 8px;
+            margin: 8px 0;
+        }
+        .pnl-section {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .pnl-header {
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .pnl-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .pnl-card {
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        .pnl-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .pnl-positive {
+            color: #4ade80;
+        }
+        .pnl-negative {
+            color: #f87171;
+        }
+        .loading {
+            text-align: center;
+            font-size: 1.5em;
+            padding: 50px;
+        }
+        .error {
+            background: rgba(248,113,113,0.2);
+            border: 2px solid #f87171;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📈 Stock Prediction Dashboard</h1>
+            <p>Live Monte Carlo + Particle Filter + Edge Detection</p>
+        </header>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-dot"></span>
+                <span>Status: <span id="status-text">Initializing...</span></span>
+            </div>
+            <div class="status-item">
+                <span>Last Updated: <span id="last-updated">--</span></span>
+            </div>
+            <button class="refresh-btn" onclick="refreshData()">Refresh Now</button>
+        </div>
+
+        <div id="main-content" class="loading">Loading data...</div>
+
+        <div class="pnl-section" id="pnl-section" style="display: none;">
+            <div class="pnl-header">💰 Position P&L Tracker</div>
+            <div class="pnl-grid" id="pnl-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        let data = null;
+        let positions = {};
+
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/full');
+                if (!response.ok) throw new Error('API request failed');
+                data = await response.json();
+                updateDashboard();
+            } catch (error) {
+                document.getElementById('main-content').innerHTML = `
+                    <div class="error">
+                        <h2>⚠️ Error Loading Data</h2>
+                        <p>${error.message}</p>
+                        <button class="refresh-btn" onclick="refreshData()">Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        function updateDashboard() {
+            if (!data) return;
+
+            document.getElementById('status-text').textContent = data.status || 'OK';
+            document.getElementById('last-updated').textContent = new Date(data.last_updated).toLocaleString();
+
+            const mainContent = document.getElementById('main-content');
+            mainContent.className = 'grid';
+            mainContent.innerHTML = '';
+
+            for (let i = 0; i < data.snapshots.length; i++) {
+                const snap = data.snapshots[i];
+                const pred = data.predictions[i];
+                const edge = data.edges[i];
+
+                if (snap.error) continue;
+
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div class="card-header">
+                        <span class="ticker">${snap.ticker}</span>
+                        <span class="price">$${snap.current_price.toFixed(2)}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Signal:</span>
+                        <span class="signal ${edge.signal}">${edge.signal}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Edge Score:</span>
+                        <span>${edge.composite_score.toFixed(2)}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Volatility:</span>
+                        <span>${(snap.volatility * 100).toFixed(2)}%</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">RSI:</span>
+                        <span>${snap.rsi.toFixed(2)}</span>
+                    </div>
+                    <div class="predictions">
+                        <strong>Predictions:</strong>
+                        ${Object.entries(pred.predictions).map(([horizon, p]) => `
+                            <div class="prediction-item">
+                                <div class="metric-row">
+                                    <span>${horizon}:</span>
+                                    <span>↑ ${(p.p_up * 100).toFixed(1)}% | ↓ ${(p.p_down * 100).toFixed(1)}%</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                mainContent.appendChild(card);
+
+                updatePosition(snap.ticker, edge.signal, snap.current_price);
+            }
+
+            updatePnLDisplay();
+        }
+
+        function updatePosition(ticker, signal, currentPrice) {
+            if (!positions[ticker]) {
+                positions[ticker] = {
+                    status: 'NONE',
+                    entryPrice: 0,
+                    shares: 100,
+                    pnl: 0
+                };
+            }
+
+            const pos = positions[ticker];
+
+            if (signal === 'BUY' && pos.status !== 'LONG') {
+                pos.status = 'LONG';
+                pos.entryPrice = currentPrice;
+                pos.pnl = 0;
+            } else if (signal === 'SELL' && pos.status === 'LONG') {
+                pos.status = 'CLOSED';
+                pos.pnl = (currentPrice - pos.entryPrice) * pos.shares;
+            } else if (pos.status === 'LONG') {
+                pos.pnl = (currentPrice - pos.entryPrice) * pos.shares;
+            }
+        }
+
+        function updatePnLDisplay() {
+            const pnlGrid = document.getElementById('pnl-grid');
+            pnlGrid.innerHTML = '';
+
+            let totalPnL = 0;
+            for (const [ticker, pos] of Object.entries(positions)) {
+                if (pos.status === 'NONE') continue;
+
+                totalPnL += pos.pnl;
+
+                const pnlCard = document.createElement('div');
+                pnlCard.className = 'pnl-card';
+                pnlCard.innerHTML = `
+                    <div><strong>${ticker}</strong></div>
+                    <div>Status: ${pos.status}</div>
+                    <div>Entry: $${pos.entryPrice.toFixed(2)}</div>
+                    <div class="pnl-value ${pos.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                        ${pos.pnl >= 0 ? '+' : ''}$${pos.pnl.toFixed(2)}
+                    </div>
+                `;
+                pnlGrid.appendChild(pnlCard);
+            }
+
+            const totalCard = document.createElement('div');
+            totalCard.className = 'pnl-card';
+            totalCard.style.background = 'rgba(255,255,255,0.15)';
+            totalCard.innerHTML = `
+                <div><strong>TOTAL P&L</strong></div>
+                <div class="pnl-value ${totalPnL >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                    ${totalPnL >= 0 ? '+' : ''}$${totalPnL.toFixed(2)}
+                </div>
+            `;
+            pnlGrid.appendChild(totalCard);
+
+            document.getElementById('pnl-section').style.display = 'block';
+        }
+
+        async function refreshData() {
+            document.getElementById('status-text').textContent = 'Refreshing...';
+            await fetchData();
+        }
+
+        fetchData();
+        setInterval(fetchData, 300000);
+    </script>
+</body>
+</html>

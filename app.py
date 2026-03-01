@@ -113,6 +113,22 @@ def api_full():
         "last_updated": _cache["last_updated"]
     })
 
+@app.get("/api/price_history/{ticker}")
+def api_price_history(ticker: str, days: int = 90):
+    """Return last N days of close prices for charting."""
+    from modules.data_fetcher import get_price_series
+    try:
+        series = get_price_series(ticker, days)
+        return JSONResponse(series)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/closed_trades")
+def api_closed_trades():
+    """Return closed trade history with P&L."""
+    summary = get_all_positions_summary()
+    return JSONResponse(summary["closed_trades"])
+
 @app.get("/")
 def serve_dashboard():
     return FileResponse(str(BASE_DIR / "index.html"))

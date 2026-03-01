@@ -195,7 +195,7 @@
                     pnlHistory[pos.ticker].push(pnl);
                 });
 
-                document.getElementById('realized').textContent = `$${data.portfolio.total_realized.toFixed(2)}`;
+                document.getElementById('realized').textContent = `$${(data.portfolio.total_realized_pnl || 0).toFixed(2)}`;
                 document.getElementById('open-pnl').textContent = `$${openPnL.toFixed(2)}`;
                 document.getElementById('open-pnl').className = `stat-value ${openPnL >= 0 ? 'positive' : 'negative'}`;
                 
@@ -205,13 +205,16 @@
             }
         }
 
+        const TICKER_COLORS = { SPX: '#38bdf8', SPY: '#a78bfa', AAPL: '#4ade80', NVDA: '#fbbf24', TSLA: '#f87171' };
+
         function updateChart() {
-            const labels = Array.from({length: Math.max(...Object.values(pnlHistory).map(h => h.length), 0)}, (_, i) => i);
+            const maxLen = Math.max(...Object.values(pnlHistory).map(h => h.length), 0);
+            const labels = Array.from({length: maxLen}, (_, i) => i);
             pnlChart.data.labels = labels;
             pnlChart.data.datasets = Object.keys(pnlHistory).map(ticker => ({
                 label: ticker,
                 data: pnlHistory[ticker],
-                borderColor: '#' + (Math.random().toString(16) + '000000').substring(2,8),
+                borderColor: TICKER_COLORS[ticker] || '#94a3b8',
                 borderWidth: 2,
                 tension: 0.3,
                 pointRadius: 0

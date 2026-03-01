@@ -21,7 +21,7 @@ try:
     from modules.data_fetcher import get_all_snapshots, TICKERS
     from modules.predictor import generate_prediction
     from modules.edge_detector import run_all_edge_detection
-    from modules.position_tracker import update_all_positions, get_all_positions, get_pnl_summary, init_db as init_pos_db
+    from modules.position_tracker import update_positions, get_all_positions_summary, init_db as init_pos_db
     from modules.brier_tracker import log_prediction, resolve_predictions, get_all_brier_scores, init_db as init_brier_db
 
 except Exception as e:
@@ -76,7 +76,7 @@ def refresh_data():
                 log_prediction(snap["ticker"], "30d", pred["predictions"]["30d"]["p_up"], snap["current_price"])
 
         # Update Live Positions (PNL tracking)
-        update_all_positions(snapshots, edges)
+        update_positions(edges)
         
         # Update Cache
         _cache.update({
@@ -101,13 +101,14 @@ def startup_event():
 
 @app.get("/api/full")
 def api_full():
+    portfolio = get_all_positions_summary()
     return JSONResponse({
         "snapshots": _cache["snapshots"],
         "predictions": _cache["predictions"],
         "edges": _cache["edges"],
         "brier_scores": _cache["brier_scores"],
-        "portfolio": get_pnl_summary(),
-        "positions": get_all_positions(),
+        "portfolio": portfolio,
+        "positions": portfolio["open_positions"],
         "status": _cache["status"],
         "last_updated": _cache["last_updated"]
     })

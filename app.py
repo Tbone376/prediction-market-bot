@@ -149,6 +149,30 @@ def api_backtest_ticker(ticker: str, period: str = "1y"):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.get("/api/polymarket")
+def api_polymarket():
+    """Fetch Polymarket prediction contracts and compare to our model.
+    Returns contracts with implied probability vs model probability + edge.
+    Cached for 5 minutes."""
+    from modules.polymarket import get_all_polymarket_signals
+    cache_key = "polymarket"
+    if cache_key in _cache and _cache.get(f"{cache_key}_ts"):
+        from datetime import timedelta
+        age = datetime.utcnow() - datetime.fromisoformat(_cache[f"{cache_key}_ts"])
+        if age < timedelta(minutes=5):
+            return JSONResponse(_cache[cache_key])
+    try:
+        signals = get_all_polymarket_signals(
+            _cache["snapshots"],
+            _cache["predictions"],
+        )
+        _cache[cache_key] = signals
+        _cache[f"{cache_key}_ts"] = datetime.utcnow().isoformat()
+        return JSONResponse(signals)
+    except Exception as e:
+        logger.error(f"Polymarket fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/closed_trades")
 def api_closed_trades():
     """Return closed trade history with P&L."""

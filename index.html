@@ -214,6 +214,48 @@
         .bt-trades-table tr:last-child td { border-bottom: none; }
         .bt-loading { text-align: center; padding: 30px 0; color: var(--text-muted); font-size: 0.8rem; }
 
+        /* ── POLYMARKET ── */
+        .pm-section { margin-top: 4px; }
+        .pm-filter-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+        .pm-filter-btn {
+            background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
+            padding: 3px 10px; border-radius: 5px; font-size: 0.68rem; font-weight: 600; cursor: pointer;
+            font-family: 'Inter', sans-serif;
+        }
+        .pm-filter-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+        .pm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+        .pm-card {
+            background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+            padding: 14px; transition: border-color 0.2s;
+        }
+        .pm-card:hover { border-color: var(--border-hover); }
+        .pm-card.edge-positive { border-left: 3px solid var(--green); }
+        .pm-card.edge-negative { border-left: 3px solid var(--red); }
+        .pm-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+        .pm-card-ticker { font-weight: 700; font-size: 0.75rem; color: var(--text-dim); }
+        .pm-card-question { font-size: 0.78rem; font-weight: 600; line-height: 1.35; margin-bottom: 10px; }
+        .pm-prob-row { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+        .pm-prob-item { flex: 1; }
+        .pm-prob-label { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 2px; }
+        .pm-prob-val { font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 800; }
+        .pm-prob-bar { height: 4px; border-radius: 2px; background: var(--surface); margin-top: 3px; overflow: hidden; position: relative; }
+        .pm-prob-fill { height: 100%; border-radius: 2px; }
+        .pm-edge-badge {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 800;
+            padding: 3px 8px; border-radius: 5px;
+        }
+        .pm-edge-badge.positive { background: var(--green-dim); color: var(--green); }
+        .pm-edge-badge.negative { background: var(--red-dim); color: var(--red); }
+        .pm-edge-badge.neutral { background: var(--surface); color: var(--text-muted); }
+        .pm-meta { display: flex; gap: 12px; font-size: 0.62rem; color: var(--text-muted); margin-top: 8px; }
+        .pm-link { color: var(--accent); text-decoration: none; font-size: 0.62rem; font-weight: 600; }
+        .pm-link:hover { text-decoration: underline; }
+        .pm-empty { text-align: center; padding: 30px 0; color: var(--text-muted); font-size: 0.8rem; }
+        .pm-summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 14px; }
+        .pm-summary-stat { background: var(--surface-2); padding: 10px; border-radius: 8px; text-align: center; }
+        .pm-summary-label { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 2px; }
+        .pm-summary-val { font-family: 'JetBrains Mono', monospace; font-size: 1rem; font-weight: 800; }
+
         @media (max-width: 1100px) {
             .ticker-strip { grid-template-columns: repeat(3, 1fr); }
             .main-grid { grid-template-columns: 1fr; }
@@ -273,6 +315,29 @@
                     </thead>
                     <tbody id="watchlist-body"></tbody>
                 </table>
+            </div>
+
+            <!-- POLYMARKET PREDICTION MARKETS -->
+            <div class="card pm-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;">
+                    <div class="card-title" style="margin-bottom:0;">Polymarket &mdash; Prediction Markets</div>
+                    <button class="refresh-btn" onclick="loadPolymarket()" id="pm-refresh-btn" style="font-size: 0.65rem; padding: 4px 10px;">Fetch Contracts</button>
+                </div>
+                <div style="font-size: 0.68rem; color: var(--text-muted); margin-bottom: 12px;">
+                    Live prediction market contracts compared to our model. Green edge = market underprices YES (potential buy). Red = overprices.
+                </div>
+                <div class="pm-filter-row" id="pm-filters">
+                    <button class="pm-filter-btn active" data-filter="all">All</button>
+                    <button class="pm-filter-btn" data-filter="mispriced">Mispriced Only</button>
+                    <button class="pm-filter-btn" data-filter="SPX">SPX</button>
+                    <button class="pm-filter-btn" data-filter="SPY">SPY</button>
+                    <button class="pm-filter-btn" data-filter="AAPL">AAPL</button>
+                    <button class="pm-filter-btn" data-filter="NVDA">NVDA</button>
+                    <button class="pm-filter-btn" data-filter="TSLA">TSLA</button>
+                </div>
+                <div class="pm-summary-row" id="pm-summary" style="display:none;"></div>
+                <div class="pm-grid" id="pm-grid"></div>
+                <div class="pm-empty" id="pm-empty">Click "Fetch Contracts" to load live Polymarket data.</div>
             </div>
 
             <!-- CUMULATIVE PNL -->
@@ -818,6 +883,143 @@ async function loadBacktest(ticker, period) {
         console.error(e);
     }
 }
+
+// ── POLYMARKET ──
+let pmData = [];
+let pmFilter = 'all';
+
+async function loadPolymarket() {
+    const grid = document.getElementById('pm-grid');
+    const empty = document.getElementById('pm-empty');
+    const summary = document.getElementById('pm-summary');
+    const btn = document.getElementById('pm-refresh-btn');
+
+    btn.textContent = 'Loading...';
+    btn.disabled = true;
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    empty.textContent = 'Fetching Polymarket contracts...';
+    summary.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/polymarket');
+        pmData = await res.json();
+
+        // Filter out errors and no-edge contracts
+        pmData = pmData.filter(c => !c.error && c.edge !== null && c.edge !== undefined);
+
+        if (pmData.length === 0) {
+            empty.textContent = 'No matching prediction markets found. Markets may be closed (weekend/holiday).';
+            empty.style.display = 'block';
+        } else {
+            empty.style.display = 'none';
+            renderPolymarket();
+        }
+    } catch (e) {
+        empty.textContent = 'Failed to load: ' + e.message;
+        console.error(e);
+    }
+    btn.textContent = 'Refresh';
+    btn.disabled = false;
+}
+
+function renderPolymarket() {
+    const grid = document.getElementById('pm-grid');
+    const empty = document.getElementById('pm-empty');
+    const summaryEl = document.getElementById('pm-summary');
+
+    // Apply filter
+    let filtered = pmData;
+    if (pmFilter === 'mispriced') {
+        filtered = pmData.filter(c => Math.abs(c.edge) >= 0.05);
+    } else if (pmFilter !== 'all') {
+        filtered = pmData.filter(c => c.ticker === pmFilter);
+    }
+
+    if (filtered.length === 0) {
+        grid.innerHTML = '';
+        empty.style.display = 'block';
+        empty.textContent = 'No contracts match this filter.';
+        summaryEl.style.display = 'none';
+        return;
+    }
+    empty.style.display = 'none';
+
+    // Summary stats
+    const totalContracts = filtered.length;
+    const mispriced = filtered.filter(c => Math.abs(c.edge) >= 0.05).length;
+    const avgEdge = filtered.reduce((s, c) => s + Math.abs(c.edge), 0) / totalContracts;
+    const bestBuy = filtered.filter(c => c.edge > 0).sort((a, b) => b.edge - a.edge)[0];
+    const tickerSet = new Set(filtered.map(c => c.ticker));
+
+    summaryEl.innerHTML = `
+        <div class="pm-summary-stat"><div class="pm-summary-label">Contracts</div><div class="pm-summary-val">${totalContracts}</div></div>
+        <div class="pm-summary-stat"><div class="pm-summary-label">Tickers</div><div class="pm-summary-val">${tickerSet.size}</div></div>
+        <div class="pm-summary-stat"><div class="pm-summary-label">Mispriced (5%+)</div><div class="pm-summary-val" style="color:var(--amber);">${mispriced}</div></div>
+        <div class="pm-summary-stat"><div class="pm-summary-label">Avg |Edge|</div><div class="pm-summary-val">${(avgEdge * 100).toFixed(1)}%</div></div>
+        <div class="pm-summary-stat"><div class="pm-summary-label">Best Opportunity</div><div class="pm-summary-val up">${bestBuy ? bestBuy.ticker + ' +' + bestBuy.edge_pct + '%' : '--'}</div></div>
+    `;
+    summaryEl.style.display = 'grid';
+
+    // Render cards
+    grid.innerHTML = '';
+    for (const c of filtered) {
+        const edgeAbs = Math.abs(c.edge);
+        const edgeClass = c.edge >= 0.05 ? 'positive' : c.edge <= -0.05 ? 'negative' : 'neutral';
+        const cardEdgeClass = c.edge >= 0.05 ? 'edge-positive' : c.edge <= -0.05 ? 'edge-negative' : '';
+        const edgeSign = c.edge >= 0 ? '+' : '';
+
+        const mktPct = (c.implied_prob_yes * 100).toFixed(1);
+        const modelPct = (c.model_prob * 100).toFixed(1);
+
+        // Determine bar colors
+        const mktBarColor = COLORS[c.ticker] || 'var(--accent)';
+        const modelBarColor = c.edge >= 0 ? 'var(--green)' : 'var(--red)';
+
+        const expiryText = c.days_to_expiry !== null ? c.days_to_expiry + 'd' : '--';
+        const volText = c.volume_24hr > 0 ? '$' + c.volume_24hr.toLocaleString(undefined, {maximumFractionDigits: 0}) : '$0';
+        const dirIcon = c.direction === 'above' ? '&#9650;' : c.direction === 'below' ? '&#9660;' : '&#9644;';
+        const levelText = c.price_level ? '$' + c.price_level.toLocaleString(undefined, {maximumFractionDigits: 0}) : '--';
+
+        grid.innerHTML += `
+            <div class="pm-card ${cardEdgeClass}">
+                <div class="pm-card-header">
+                    <div>
+                        <span class="pm-card-ticker">${c.ticker}</span>
+                        <span style="font-size:0.62rem; color:var(--text-muted); margin-left:6px;">${dirIcon} ${levelText}</span>
+                    </div>
+                    <span class="pm-edge-badge ${edgeClass}">${edgeSign}${c.edge_pct}%</span>
+                </div>
+                <div class="pm-card-question">${c.question}</div>
+                <div class="pm-prob-row">
+                    <div class="pm-prob-item">
+                        <div class="pm-prob-label">Market Says</div>
+                        <div class="pm-prob-val">${mktPct}%</div>
+                        <div class="pm-prob-bar"><div class="pm-prob-fill" style="width:${mktPct}%; background:${mktBarColor};"></div></div>
+                    </div>
+                    <div class="pm-prob-item">
+                        <div class="pm-prob-label">Our Model Says</div>
+                        <div class="pm-prob-val" style="color:${modelBarColor};">${modelPct}%</div>
+                        <div class="pm-prob-bar"><div class="pm-prob-fill" style="width:${modelPct}%; background:${modelBarColor};"></div></div>
+                    </div>
+                </div>
+                <div class="pm-meta">
+                    <span>Exp: ${expiryText}</span>
+                    <span>24h Vol: ${volText}</span>
+                    <a href="${c.polymarket_url}" target="_blank" class="pm-link">View on Polymarket &rarr;</a>
+                </div>
+            </div>`;
+    }
+}
+
+// Polymarket filter clicks
+document.getElementById('pm-filters').addEventListener('click', e => {
+    if (!e.target.classList.contains('pm-filter-btn')) return;
+    document.querySelectorAll('.pm-filter-btn').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    pmFilter = e.target.dataset.filter;
+    if (pmData.length > 0) renderPolymarket();
+});
 
 // ── BOOT ──
 initMainChart();
